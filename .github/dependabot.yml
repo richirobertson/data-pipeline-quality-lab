@@ -1,5 +1,6 @@
 version: 2
 updates:
+  # Keep Python libraries, CI actions, and base images visible as separate PRs.
   - package-ecosystem: pip
     directory: /
     schedule:
@@ -12,4 +13,3 @@ updates:
     directory: /
     schedule:
       interval: weekly
-

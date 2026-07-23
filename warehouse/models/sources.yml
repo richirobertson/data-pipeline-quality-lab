@@ -5,6 +5,7 @@ sources:
     schema: raw
     description: Conformed observations loaded by the PySpark boundary.
     loaded_at_field: loaded_at
+    # Wide limits demonstrate freshness without making static fixtures expire.
     freshness:
       warn_after: {count: 3650, period: day}
       error_after: {count: 7300, period: day}
@@ -22,4 +23,3 @@ sources:
             data_tests: [not_null]
           - name: source_record_hash
             data_tests: [not_null, unique]
-

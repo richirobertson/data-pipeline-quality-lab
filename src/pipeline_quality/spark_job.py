@@ -19,6 +19,7 @@ from pipeline_quality.spark_transform import (
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """Define file, evidence, and optional JDBC boundaries for the Spark stage."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--csv", type=Path, required=True)
     parser.add_argument("--csvw", type=Path, required=True)
@@ -39,9 +40,12 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Validate, transform, persist, optionally load, and summarize one extract."""
+    # Importing Spark lazily keeps fast Python unit tests lightweight.
     from pyspark.sql import SparkSession
 
     args = build_parser().parse_args(argv)
+    # Fail on metadata drift before starting the more expensive Spark session.
     validate_csvw_contract(args.csvw)
     spark = SparkSession.builder.appName("data-pipeline-quality-lab").getOrCreate()
     try:
@@ -62,6 +66,8 @@ def main(argv: list[str] | None = None) -> int:
             quarantine_path=str(args.quarantine),
         )
         if args.jdbc_url:
+            # Separating schema creation from Spark's JDBC writer makes the first
+            # run work against a completely empty PostgreSQL database.
             schema = args.db_table.split(".", maxsplit=1)[0]
             ensure_postgres_schema(
                 host=args.db_host,
@@ -79,6 +85,8 @@ def main(argv: list[str] | None = None) -> int:
                 password=args.db_password,
                 mode="overwrite",
             )
+        # Counts are materialized deliberately: they form the reconciliation
+        # evidence that input equals accepted plus quarantined records.
         summary = {
             "pipeline_run_id": args.run_id,
             "dataset_id": "TS009",
@@ -92,6 +100,7 @@ def main(argv: list[str] | None = None) -> int:
         args.summary.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
         print(json.dumps(summary))
     finally:
+        # Spark owns JVM resources that must be released even after a failed job.
         spark.stop()
     return 0
 

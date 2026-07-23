@@ -8,6 +8,7 @@ from pipeline_quality.object_store import FileObjectStore, S3ObjectStore
 
 
 def test_file_store_is_idempotent_for_the_same_content(tmp_path) -> None:
+    """A safe retry of identical content should succeed without rewriting it."""
     store = FileObjectStore(tmp_path)
 
     store.put_immutable("landing/example", b"same")
@@ -17,6 +18,7 @@ def test_file_store_is_idempotent_for_the_same_content(tmp_path) -> None:
 
 
 def test_file_store_rejects_different_content_for_an_existing_key(tmp_path) -> None:
+    """An immutable local key must never accept replacement bytes."""
     store = FileObjectStore(tmp_path)
     store.put_immutable("landing/example", b"first")
 
@@ -52,6 +54,7 @@ class FakeBody:
 
 
 def test_s3_store_creates_reads_and_reuses_immutable_object() -> None:
+    """The S3 adapter must share the local adapter's create/read/retry contract."""
     client = FakeS3()
     store = S3ObjectStore(client, "quality")
 
@@ -62,6 +65,7 @@ def test_s3_store_creates_reads_and_reuses_immutable_object() -> None:
 
 
 def test_s3_store_rejects_content_conflict() -> None:
+    """MinIO/S3 must expose attempted mutation as an explicit conflict."""
     client = FakeS3()
     store = S3ObjectStore(client, "quality")
     store.put_immutable("landing/key", b"first")

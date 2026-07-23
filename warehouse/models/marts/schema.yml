@@ -12,6 +12,7 @@ models:
       - {name: population, data_tests: [not_null]}
 
 exposures:
+  # Exposures show downstream consumers in dbt's generated lineage graph.
   - name: pipeline_quality_evidence
     label: Pipeline quality evidence report
     type: application
@@ -23,4 +24,3 @@ exposures:
     owner:
       name: Rich Robertson
       email: noreply@example.com
-

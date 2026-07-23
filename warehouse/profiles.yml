@@ -2,6 +2,7 @@ ons_quality:
   target: dev
   outputs:
     dev:
+      # Environment variables let one profile work in Compose and GitHub Actions.
       type: postgres
       host: "{{ env_var('POSTGRES_HOST', 'localhost') }}"
       port: "{{ env_var('POSTGRES_PORT', '5432') | int }}"
@@ -10,4 +11,3 @@ ons_quality:
       dbname: "{{ env_var('POSTGRES_DB', 'quality_lab') }}"
       schema: public
       threads: 4
-

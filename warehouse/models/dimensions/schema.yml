@@ -1,6 +1,7 @@
 version: 2
 
 models:
+  # Dimension tests protect the unique lookup targets referenced by fact rows.
   - name: dim_geography
     columns:
       - {name: geography_key, data_tests: [not_null, unique]}
@@ -16,4 +17,3 @@ models:
       - {name: sex_key, data_tests: [not_null, unique]}
       - {name: sex_code, data_tests: [not_null, unique]}
       - {name: sex_label, data_tests: [not_null]}
-

@@ -9,6 +9,7 @@ from typing import Any
 
 
 def load_json(path: Path) -> dict[str, Any]:
+    """Load an evidence object, returning an empty object when evidence is absent."""
     if not path.exists():
         return {}
     payload = json.loads(path.read_text(encoding="utf-8"))
@@ -16,7 +17,9 @@ def load_json(path: Path) -> dict[str, Any]:
 
 
 def dbt_summary(run_results: dict[str, Any]) -> tuple[int, int, int]:
+    """Reduce dbt's detailed node results to reviewer-friendly pass/fail counts."""
     results = run_results.get("results", [])
+    # dbt uses "success" for models and "pass" for tests, so both are healthy.
     passed = sum(result.get("status") in {"success", "pass"} for result in results)
     failed = sum(result.get("status") in {"error", "fail", "runtime error"} for result in results)
     return len(results), passed, failed
@@ -28,6 +31,7 @@ def render_report(
     spark: dict[str, Any],
     dbt_results: dict[str, Any],
 ) -> str:
+    """Join provenance, Spark reconciliation, and dbt outcomes into one report."""
     dbt_total, dbt_passed, dbt_failed = dbt_summary(dbt_results)
     artifacts = manifest.get("artifacts", [])
     artifact_lines = (
@@ -75,6 +79,7 @@ accepted plus quarantined records, dbt layer counts reconcile, and no dbt test f
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """Declare overridable artifact locations while providing local defaults."""
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--manifest", type=Path, default=Path("evidence/generated/fixture-manifest.json")
@@ -88,6 +93,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Generate the report and print its path for scripts and CI logs."""
     args = build_parser().parse_args(argv)
     report = render_report(
         manifest=load_json(args.manifest),
@@ -95,6 +101,7 @@ def main(argv: list[str] | None = None) -> int:
         dbt_results=load_json(args.dbt_results),
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
+    # A trailing newline keeps the generated Markdown friendly to POSIX tools.
     args.output.write_text(report, encoding="utf-8")
     print(args.output)
     return 0

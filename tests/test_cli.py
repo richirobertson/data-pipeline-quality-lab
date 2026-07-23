@@ -6,6 +6,7 @@ from pipeline_quality.cli import main
 
 
 def test_filter_hash_command_is_stable(tmp_path, capsys) -> None:
+    """The public CLI must expose the same canonical identity as library code."""
     definition = tmp_path / "filter.json"
     definition.write_text(
         json.dumps(
@@ -22,5 +23,6 @@ def test_filter_hash_command_is_stable(tmp_path, capsys) -> None:
 
 
 def test_cli_requires_a_command() -> None:
+    """Missing operator intent should produce a parser error, not hidden work."""
     with pytest.raises(SystemExit):
         main([])

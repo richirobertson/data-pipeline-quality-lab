@@ -1,16 +1,19 @@
 name: Pipeline quality
 
 on:
+  # Pull requests gate proposed changes; main pushes retain post-merge evidence.
   pull_request:
   push:
     branches: [main]
   workflow_dispatch:
 
 permissions:
+  # CI only needs to read repository content.
   contents: read
 
 jobs:
   python-and-spark:
+    # One installed package is exercised at unit and distributed boundaries.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -39,6 +42,7 @@ jobs:
             --curated data/curated/ons_population \
             --quarantine data/quarantine/ons_population
       - uses: actions/upload-artifact@v4
+        # Retained evidence lets reviewers inspect what the run proved.
         with:
           name: python-spark-evidence
           path: |
@@ -46,6 +50,7 @@ jobs:
             evidence/generated/
 
   dbt:
+    # A real PostgreSQL service exposes SQL and adapter issues mocks could hide.
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -78,6 +83,7 @@ jobs:
       - name: Build and test warehouse
         working-directory: warehouse
         run: |
+          # The seed isolates warehouse behavior from Spark in this job.
           dbt seed --profiles-dir .
           dbt build --profiles-dir .
           dbt docs generate --profiles-dir .
@@ -94,6 +100,7 @@ jobs:
             evidence/generated/quality-report.md
 
   docker:
+    # Parse configuration before spending time on the authoritative image build.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

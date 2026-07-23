@@ -6,6 +6,7 @@ from pipeline_quality.fixture_pipeline import main, run_fixture_pipeline
 
 
 def test_fixture_pipeline_is_repeatable(fixture_dir, tmp_path) -> None:
+    """Rerunning identical ingestion must preserve artifact and manifest identity."""
     landing = tmp_path / "landing"
     manifest_path = tmp_path / "manifest.json"
 
@@ -30,6 +31,7 @@ def test_fixture_pipeline_is_repeatable(fixture_dir, tmp_path) -> None:
 
 
 def test_fixture_pipeline_command(tmp_path, fixture_dir) -> None:
+    """The executable fixture stage must wire its inputs and outputs correctly."""
     result = main(
         [
             "--fixtures",

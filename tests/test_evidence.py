@@ -4,6 +4,7 @@ from pipeline_quality.evidence import dbt_summary, load_json, main, render_repor
 
 
 def test_dbt_summary_classifies_results() -> None:
+    """Model successes and test passes both count as healthy dbt outcomes."""
     total, passed, failed = dbt_summary(
         {
             "results": [
@@ -17,6 +18,7 @@ def test_dbt_summary_classifies_results() -> None:
 
 
 def test_report_connects_source_spark_and_dbt_evidence() -> None:
+    """One report should trace source identity through processing and modeling."""
     report = render_report(
         manifest={
             "run_id": "run-1",
@@ -35,6 +37,7 @@ def test_report_connects_source_spark_and_dbt_evidence() -> None:
 
 
 def test_load_json_handles_missing_and_non_object_files(tmp_path) -> None:
+    """Incomplete diagnostic inputs should degrade predictably."""
     assert load_json(tmp_path / "missing.json") == {}
     path = tmp_path / "list.json"
     path.write_text("[]")
@@ -42,6 +45,7 @@ def test_load_json_handles_missing_and_non_object_files(tmp_path) -> None:
 
 
 def test_evidence_command_writes_report(tmp_path) -> None:
+    """The operator-facing command must create its promised Markdown artifact."""
     manifest = tmp_path / "manifest.json"
     manifest.write_text(json.dumps({"run_id": "cli-run"}))
     output = tmp_path / "report.md"

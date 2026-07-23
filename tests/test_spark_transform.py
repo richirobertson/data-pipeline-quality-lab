@@ -34,6 +34,7 @@ def metadata():
 
 
 def test_transform_accepts_fixture_at_declared_grain(spark, fixture_dir) -> None:
+    """Valid provider-shaped rows must survive at the declared dimensional grain."""
     from pipeline_quality.spark_transform import read_source, transform_observations
 
     result = transform_observations(
@@ -47,6 +48,7 @@ def test_transform_accepts_fixture_at_declared_grain(spark, fixture_dir) -> None
 
 
 def test_invalid_and_duplicate_rows_are_explainable(spark) -> None:
+    """Every invalid, exact-duplicate, or conflicting row needs a stable reason."""
     from pipeline_quality.spark_transform import source_schema, transform_observations
 
     rows = [
@@ -75,6 +77,7 @@ def test_invalid_and_duplicate_rows_are_explainable(spark) -> None:
 
 
 def test_results_do_not_depend_on_input_partition_count(spark, fixture_dir) -> None:
+    """Distributed partition choices must not change accepted business results."""
     from pipeline_quality.spark_transform import read_source, transform_observations
 
     frame = read_source(spark, str(fixture_dir / "ons-population.csv"))

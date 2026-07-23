@@ -8,6 +8,7 @@ models:
       - name: geography_key
         data_tests:
           - not_null
+          # Reject facts that point to no known geography dimension member.
           - relationships:
               to: ref('dim_geography')
               field: geography_key

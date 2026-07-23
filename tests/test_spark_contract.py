@@ -9,10 +9,12 @@ from pipeline_quality.spark_transform import validate_csvw_contract
 
 
 def test_csvw_fixture_matches_source_contract(fixture_dir) -> None:
+    """Repository metadata must remain a faithful example of the ONS contract."""
     validate_csvw_contract(fixture_dir / "ons-population.csvw")
 
 
 def test_csvw_rejects_reordered_columns(fixture_dir, tmp_path) -> None:
+    """Column reordering is schema drift because it can change field meaning."""
     payload = json.loads((fixture_dir / "ons-population.csvw").read_text())
     payload["tableSchema"]["columns"].reverse()
     changed = tmp_path / "changed.csvw"
@@ -23,6 +25,7 @@ def test_csvw_rejects_reordered_columns(fixture_dir, tmp_path) -> None:
 
 
 def test_csvw_rejects_non_integer_observation(fixture_dir, tmp_path) -> None:
+    """The population measure must retain its declared integer type."""
     payload = json.loads((fixture_dir / "ons-population.csvw").read_text())
     payload["tableSchema"]["columns"][-1]["datatype"] = "string"
     changed = tmp_path / "changed.csvw"

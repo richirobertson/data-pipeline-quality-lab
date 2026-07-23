@@ -21,6 +21,7 @@ RAW_HEADERS = [
     "Age (91 categories)",
     "Observation",
 ]
+# Internal names isolate downstream code from verbose provider presentation names.
 SOURCE_COLUMNS = [
     "geography_code",
     "geography_label",
@@ -30,11 +31,14 @@ SOURCE_COLUMNS = [
     "age_label",
     "observation",
 ]
+# One observation is uniquely identified by all three analytical dimensions.
 BUSINESS_KEY = ["geography_code", "age_code", "sex_code"]
 
 
 @dataclass(frozen=True)
 class SourceMetadata:
+    """Run-level values copied onto every output row for traceability."""
+
     dataset_id: str
     edition: str
     version: int
@@ -45,11 +49,14 @@ class SourceMetadata:
 
 @dataclass(frozen=True)
 class TransformationResult:
+    """Keep accepted and rejected data equally visible to downstream stages."""
+
     accepted: DataFrame
     quarantined: DataFrame
 
 
 def validate_csvw_contract(path: Path) -> None:
+    """Fail fast when ONS metadata no longer describes the expected CSV."""
     payload = json.loads(path.read_text(encoding="utf-8"))
     columns = payload.get("tableSchema", {}).get("columns", [])
     names = [column.get("name") for column in columns]
@@ -63,6 +70,8 @@ def validate_csvw_contract(path: Path) -> None:
 
 
 def source_schema():
+    """Return the normalized schema used by tests and downstream transforms."""
+    # Lazy imports allow non-Spark modules and tests to load without starting Java.
     from pyspark.sql.types import LongType, StringType, StructField, StructType
 
     return StructType(
@@ -79,6 +88,7 @@ def source_schema():
 
 
 def raw_source_schema():
+    """Return an explicit schema using the provider's published column names."""
     from pyspark.sql.types import LongType, StringType, StructField, StructType
 
     return StructType(
@@ -95,6 +105,7 @@ def raw_source_schema():
 
 
 def read_source(spark: SparkSession, csv_path: str) -> DataFrame:
+    """Validate physical headers, apply explicit types, and normalize names."""
     from pyspark.sql import functions as f
 
     observed_headers = spark.read.option("header", True).csv(csv_path).columns
@@ -103,6 +114,7 @@ def read_source(spark: SparkSession, csv_path: str) -> DataFrame:
             f"CSV columns do not match the source contract: expected {RAW_HEADERS}, "
             f"got {observed_headers}"
         )
+    # Explicit types avoid Spark inference changing behavior with different samples.
     frame = spark.read.option("header", True).schema(raw_source_schema()).csv(csv_path)
     return frame.select(
         *[
@@ -116,9 +128,11 @@ def transform_observations(
     frame: DataFrame,
     metadata: SourceMetadata,
 ) -> TransformationResult:
+    """Split observations into deterministic accepted and quarantined outputs."""
     from pyspark.sql import Window
     from pyspark.sql import functions as f
 
+    # Whitespace-only dimension values should be treated like missing values.
     cleaned = frame
     for column in SOURCE_COLUMNS[:-1]:
         cleaned = cleaned.withColumn(column, f.trim(f.col(column)))
@@ -130,6 +144,7 @@ def transform_observations(
             condition if missing_dimension is None else missing_dimension | condition
         )
 
+    # Ordering the rules gives every rejected row one stable primary explanation.
     invalid = cleaned.withColumn(
         "quality_rule",
         f.when(missing_dimension, f.lit("missing_dimension"))
@@ -139,6 +154,8 @@ def transform_observations(
     structurally_valid = invalid.filter(f.col("quality_rule").isNull()).drop("quality_rule")
     invalid_rows = invalid.filter(f.col("quality_rule").isNotNull())
 
+    # Conflicting values at the same business key are ambiguous, so all versions
+    # are quarantined rather than choosing a winner without business authority.
     conflicting_keys = (
         structurally_valid.groupBy(*BUSINESS_KEY)
         .agg(f.countDistinct("observation").alias("distinct_observations"))
@@ -150,6 +167,8 @@ def transform_observations(
     )
     non_conflicting = structurally_valid.join(conflicting_keys, BUSINESS_KEY, "left_anti")
 
+    # row_number with an explicit ordering makes exact deduplication repeatable
+    # even when Spark distributes the rows across partitions differently.
     exact_window = Window.partitionBy(*BUSINESS_KEY, "observation").orderBy(
         f.col("geography_label"), f.col("age_label"), f.col("sex_label")
     )
@@ -161,6 +180,7 @@ def transform_observations(
     )
     accepted = ranked.filter(f.col("_duplicate_rank") == 1).drop("_duplicate_rank")
 
+    # unionByName protects against accidental column-order differences.
     quarantined = invalid_rows.unionByName(conflicting_rows).unionByName(exact_duplicates)
     accepted = _add_provenance(accepted, metadata)
     quarantined = _add_provenance(quarantined, metadata)
@@ -191,6 +211,7 @@ def transform_observations(
 
 
 def _add_provenance(frame: DataFrame, metadata: SourceMetadata) -> DataFrame:
+    """Attach run identity and a deterministic fingerprint to every output row."""
     from pyspark.sql import functions as f
 
     return (
@@ -202,6 +223,7 @@ def _add_provenance(frame: DataFrame, metadata: SourceMetadata) -> DataFrame:
         .withColumn("loaded_at", f.to_timestamp(f.lit(metadata.loaded_at)))
         .withColumn(
             "source_record_hash",
+            # A visible separator and explicit null token avoid ambiguous hashes.
             f.sha2(
                 f.concat_ws(
                     "||",
@@ -222,6 +244,8 @@ def write_results(
     curated_path: str,
     quarantine_path: str,
 ) -> None:
+    """Persist accepted and rejected records as independently queryable Parquet."""
+    # Overwrite makes a rerun of the same local stage idempotent.
     (
         result.accepted.write.mode("overwrite")
         .partitionBy("edition", "version")
@@ -243,6 +267,7 @@ def load_postgres(
     password: str,
     mode: str = "append",
 ) -> None:
+    """Write accepted rows through Spark's PostgreSQL JDBC connector."""
     (
         frame.write.format("jdbc")
         .option("url", jdbc_url)
@@ -250,6 +275,7 @@ def load_postgres(
         .option("user", user)
         .option("password", password)
         .option("driver", "org.postgresql.Driver")
+        # Truncate preserves the table and dependent dbt views during reruns.
         .option("truncate", "true")
         .mode(mode)
         .save()
@@ -265,6 +291,7 @@ def ensure_postgres_schema(
     password: str,
     schema: str,
 ) -> None:
+    """Create the target namespace safely before Spark attempts its first load."""
     import psycopg2
     from psycopg2 import sql
 
@@ -278,4 +305,5 @@ def ensure_postgres_schema(
         ) as connection,
         connection.cursor() as cursor,
     ):
+        # Identifier quoting prevents a schema name from being interpreted as SQL.
         cursor.execute(sql.SQL("create schema if not exists {}").format(sql.Identifier(schema)))

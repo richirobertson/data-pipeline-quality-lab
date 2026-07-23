@@ -1,5 +1,7 @@
+-- dbt checks this SELECT against the names and types declared in schema.yml.
 {{ config(contract={"enforced": true}) }}
 
+-- Staging changes representation only; it must not filter or aggregate rows.
 select
     cast(dataset_id as {{ dbt.type_string() }}) as dataset_id,
     cast(edition as {{ dbt.type_string() }}) as edition,
@@ -16,4 +18,3 @@ select
     cast(source_record_hash as {{ dbt.type_string() }}) as source_record_hash,
     cast(loaded_at as timestamp) as loaded_at
 from {{ source('raw', 'raw_ons_observations') }}
-

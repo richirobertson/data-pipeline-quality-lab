@@ -24,6 +24,7 @@ class OnsClient:
         max_retries: int = 3,
         sleeper: Callable[[float], None] = time.sleep,
     ) -> None:
+        # Dependency injection keeps HTTP and sleeping deterministic in tests.
         self._owns_client = client is None
         self._client = client or httpx.Client(
             base_url=BASE_URL,
@@ -34,6 +35,7 @@ class OnsClient:
         self._sleep = sleeper
 
     def close(self) -> None:
+        """Close only clients created by this object, not caller-owned clients."""
         if self._owns_client:
             self._client.close()
 
@@ -44,18 +46,21 @@ class OnsClient:
         self.close()
 
     def _request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
+        """Send a bounded request with rate-limit and transient-error handling."""
         for attempt in range(self._max_retries + 1):
             try:
                 response = self._client.request(method, path, **kwargs)
             except httpx.TransportError as exc:
                 if attempt == self._max_retries:
                     raise OnsApiError(f"ONS request failed after {attempt + 1} attempts") from exc
+                # Exponential backoff spaces repeated transport failures out.
                 self._sleep(2**attempt)
                 continue
 
             retryable = response.status_code == 429 or response.status_code >= 500
             if retryable and attempt < self._max_retries:
                 retry_after = response.headers.get("Retry-After")
+                # The provider's explicit delay takes precedence over our policy.
                 delay = float(retry_after) if retry_after else float(2**attempt)
                 self._sleep(delay)
                 continue
@@ -71,18 +76,22 @@ class OnsClient:
         raise AssertionError("retry loop exhausted unexpectedly")
 
     def get_dataset_version(self, dataset_id: str, edition: str, version: int) -> dict[str, Any]:
+        """Retrieve the exact version required for reproducible ingestion."""
         response = self._request(
             "GET", f"/datasets/{dataset_id}/editions/{edition}/versions/{version}"
         )
         return self._json(response)
 
     def create_filter(self, definition: dict[str, Any]) -> dict[str, Any]:
+        """Ask ONS to create a bounded multidimensional extract definition."""
         return self._json(self._request("POST", "/filters", json=definition))
 
     def submit_filter(self, filter_id: str) -> dict[str, Any]:
+        """Start asynchronous processing of a previously created filter."""
         return self._json(self._request("POST", f"/filters/{filter_id}/submit"))
 
     def get_filter_output(self, output_id: str) -> dict[str, Any]:
+        """Read the current state of an asynchronous filter output."""
         return self._json(self._request("GET", f"/filter-outputs/{output_id}"))
 
     def wait_for_downloads(
@@ -92,10 +101,12 @@ class OnsClient:
         max_attempts: int = 10,
         poll_interval: float = 1.0,
     ) -> dict[str, Any]:
+        """Poll until both data and metadata downloads exist or a boundary is hit."""
         for attempt in range(max_attempts):
             output = self.get_filter_output(output_id)
             if self._has_ready_download(output, "csv") and self._has_ready_download(output, "csvw"):
                 return output
+            # An explicit provider error is terminal; further polling cannot fix it.
             if any(event.get("type") == "error" for event in output.get("events", [])):
                 raise OnsApiError(f"ONS filter output {output_id} reported an error")
             if attempt + 1 < max_attempts:
@@ -105,6 +116,7 @@ class OnsClient:
         )
 
     def download(self, url: str) -> httpx.Response:
+        """Download a non-empty artifact while reusing bounded request behavior."""
         response = self._request("GET", url, headers={"Accept": "*/*"})
         if not response.content:
             raise OnsApiError(f"ONS artifact at {url} was empty")
@@ -112,11 +124,13 @@ class OnsClient:
 
     @staticmethod
     def _has_ready_download(output: dict[str, Any], kind: str) -> bool:
+        """Interpret the two download-link shapes returned by the beta API."""
         item = output.get("downloads", {}).get(kind, {})
         return bool((item.get("public") or item.get("href")) and not item.get("skipped", False))
 
     @staticmethod
     def _json(response: httpx.Response) -> dict[str, Any]:
+        """Validate response media type, JSON syntax, and top-level shape."""
         content_type = response.headers.get("Content-Type", "")
         if "json" not in content_type.lower():
             raise OnsApiError(

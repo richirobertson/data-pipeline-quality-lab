@@ -17,6 +17,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Extras separate lightweight API usage from Spark, dbt, and test toolchains.
 spark = ["pyspark==3.5.5"]
 dbt = [
   "dbt-core==1.9.4",
@@ -45,6 +46,7 @@ pipeline-quality = "pipeline_quality.cli:main"
 where = ["src"]
 
 [tool.pytest.ini_options]
+# Every normal pytest invocation collects branch-aware package coverage.
 addopts = "-ra --strict-markers --cov=pipeline_quality --cov-report=term-missing"
 testpaths = ["tests"]
 markers = [
@@ -55,6 +57,8 @@ markers = [
 
 [tool.coverage.run]
 branch = true
+# The thin executable is validated through component and end-to-end behavior;
+# including its argument wiring would make the coverage signal less meaningful.
 omit = ["*/pipeline_quality/spark_job.py"]
 
 [tool.coverage.report]

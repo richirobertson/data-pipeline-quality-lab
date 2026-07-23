@@ -15,6 +15,7 @@ from pipeline_quality.models import DatasetRef, FilterDefinition
 
 
 def test_filter_hash_is_stable_when_json_key_order_changes(load_fixture) -> None:
+    """JSON presentation order must not alter the meaning of an ONS request."""
     payload = load_fixture("filter-definition.json")
     first = canonical_filter_hash(FilterDefinition.model_validate(payload))
     reordered = {
@@ -34,10 +35,12 @@ def test_filter_hash_is_stable_when_json_key_order_changes(load_fixture) -> None
 
 @given(st.binary())
 def test_sha256_is_always_a_lowercase_hex_digest(content: bytes) -> None:
+    """Every possible byte payload must produce a valid SHA-256 representation."""
     assert re.fullmatch(r"[a-f0-9]{64}", sha256_bytes(content))
 
 
 def test_artifact_contains_content_addressed_key() -> None:
+    """Storage identity must bind source context to the exact artifact bytes."""
     source = DatasetRef(id="TS009", edition="2021", version=1)
     artifact = build_artifact(
         source=source,

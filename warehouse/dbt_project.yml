@@ -15,6 +15,7 @@ clean-targets:
 
 models:
   ons_quality:
+    # Views are the safe default; durable analytical entities opt into tables.
     +materialized: view
     staging:
       +schema: staging
@@ -32,9 +33,11 @@ models:
 
 seeds:
   ons_quality:
+    # The seed substitutes for Spark during isolated dbt development and CI.
     +schema: raw
     +quote_columns: false
     raw_ons_observations:
+      # Explicit types keep CSV inference aligned with Spark's JDBC schema.
       +column_types:
         geography_code: varchar
         geography_label: varchar

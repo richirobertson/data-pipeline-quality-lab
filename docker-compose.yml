@@ -1,4 +1,5 @@
 services:
+  # PostgreSQL behaves like a real analytical warehouse target for dbt and JDBC.
   postgres:
     image: postgres:16.6-alpine
     environment:
@@ -6,6 +7,7 @@ services:
       POSTGRES_PASSWORD: pipeline
       POSTGRES_DB: quality_lab
     ports:
+      # A non-default host port avoids colliding with a developer's own database.
       - "55432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U pipeline -d quality_lab"]
@@ -16,12 +18,14 @@ services:
       - postgres-data:/var/lib/postgresql/data
 
   minio:
+    # MinIO provides the S3 API locally without requiring a cloud account.
     image: minio/minio:RELEASE.2025-04-22T22-12-26Z
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: pipeline
       MINIO_ROOT_PASSWORD: pipeline-secret
     ports:
+      # API and browser console ports are distinct.
       - "19000:9000"
       - "19001:9001"
     healthcheck:
@@ -33,6 +37,7 @@ services:
       - minio-data:/data
 
   minio-init:
+    # This one-shot service creates the bucket after MinIO is genuinely ready.
     image: minio/mc:RELEASE.2025-04-16T18-13-26Z
     depends_on:
       minio:
@@ -45,6 +50,7 @@ services:
         mc mb --ignore-existing local/pipeline-quality
 
   quality:
+    # All Python, Spark, dbt, and test commands share one authoritative image.
     build:
       context: .
     environment:
@@ -60,13 +66,16 @@ services:
       DBT_PROFILES_DIR: /workspace/warehouse
       PYTHONPATH: /workspace/src
     depends_on:
+      # Health-based dependencies prevent race conditions during local startup.
       postgres:
         condition: service_healthy
       minio:
         condition: service_healthy
     volumes:
+      # Mounting the repository makes edits visible without rebuilding the image.
       - .:/workspace
 
 volumes:
+  # Named volumes keep local state between normal `up` and `down` operations.
   postgres-data:
   minio-data:

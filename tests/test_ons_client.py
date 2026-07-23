@@ -31,6 +31,7 @@ def scripted_client(*handlers):
 
 
 def test_create_and_submit_filter(load_fixture) -> None:
+    """The client must carry the created filter identity into submission."""
     client = scripted_client(
         response(201, load_fixture("filter-created.json")),
         response(202, load_fixture("filter-submitted.json")),
@@ -44,6 +45,7 @@ def test_create_and_submit_filter(load_fixture) -> None:
 
 
 def test_polling_waits_for_csv_and_csvw(load_fixture) -> None:
+    """A filter is ready only when both data and schema metadata are downloadable."""
     sleeps: list[float] = []
     client = scripted_client(
         response(200, load_fixture("filter-pending.json")),
@@ -58,6 +60,7 @@ def test_polling_waits_for_csv_and_csvw(load_fixture) -> None:
 
 
 def test_polling_times_out(load_fixture) -> None:
+    """A permanently pending upstream job must stop at a finite boundary."""
     client = scripted_client(
         response(200, load_fixture("filter-pending.json")),
         response(200, load_fixture("filter-pending.json")),
@@ -69,6 +72,7 @@ def test_polling_times_out(load_fixture) -> None:
 
 
 def test_polling_stops_on_source_error(load_fixture) -> None:
+    """An explicit provider error is terminal and must remain visible."""
     client = scripted_client(response(200, load_fixture("filter-error.json")))
     ons = OnsClient(client=client)
 
@@ -77,6 +81,7 @@ def test_polling_stops_on_source_error(load_fixture) -> None:
 
 
 def test_rate_limit_honours_retry_after() -> None:
+    """HTTP 429 handling must respect the provider's requested delay."""
     sleeps: list[float] = []
     client = scripted_client(
         response(429, {"error": "slow down"}, headers={"Retry-After": "3"}),
@@ -91,6 +96,8 @@ def test_rate_limit_honours_retry_after() -> None:
 
 
 def test_html_error_page_is_not_treated_as_json() -> None:
+    """A proxy error page must not be mistaken for a valid API object."""
+
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(
             200,
@@ -111,6 +118,7 @@ def test_html_error_page_is_not_treated_as_json() -> None:
 
 
 def test_transport_failure_is_bounded() -> None:
+    """Repeated network errors must not create an infinite retry loop."""
     attempts = 0
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -130,6 +138,7 @@ def test_transport_failure_is_bounded() -> None:
 
 
 def test_non_retryable_http_error_is_descriptive() -> None:
+    """Permanent HTTP errors should preserve useful request context."""
     client = scripted_client(response(404, {"error": "missing"}))
     ons = OnsClient(client=client)
 
@@ -138,6 +147,8 @@ def test_non_retryable_http_error_is_descriptive() -> None:
 
 
 def test_download_rejects_empty_artifact() -> None:
+    """An empty download cannot become a successful ingestion input."""
+
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, content=b"", request=request)
 

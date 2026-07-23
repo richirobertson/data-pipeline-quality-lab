@@ -4,6 +4,7 @@ models:
   - name: stg_ons_observations
     description: Contracted, grain-preserving view of accepted Spark output.
     config:
+      # Renamed or retyped public columns stop the build at staging.
       contract:
         enforced: true
     columns:
@@ -21,4 +22,3 @@ models:
       - {name: pipeline_run_id, data_type: text, data_tests: [not_null]}
       - {name: source_record_hash, data_type: text, data_tests: [not_null, unique]}
       - {name: loaded_at, data_type: timestamp, data_tests: [not_null]}
-

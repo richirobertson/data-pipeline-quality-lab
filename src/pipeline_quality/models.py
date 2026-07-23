@@ -11,6 +11,8 @@ from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 class DatasetRef(BaseModel):
     """The ONS identity required to reproduce an extract."""
 
+    # Rejecting unknown fields makes upstream contract drift visible rather than
+    # silently discarding information that may be important.
     model_config = ConfigDict(extra="forbid")
 
     id: str
@@ -36,6 +38,7 @@ class ArtifactRef(BaseModel):
     kind: Literal["csv", "csvw", "json"]
     source_url: HttpUrl
     object_key: str
+    # SHA-256 is always represented as 64 lowercase hexadecimal characters.
     sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
     size_bytes: int = Field(ge=0)
     content_type: str | None = None
@@ -47,6 +50,7 @@ class IngestionManifest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    # Versioning lets future readers distinguish incompatible manifest formats.
     manifest_version: Literal[1] = 1
     run_id: str
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

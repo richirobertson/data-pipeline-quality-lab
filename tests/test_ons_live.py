@@ -13,6 +13,7 @@ pytestmark = [
 
 
 def test_ts009_version_contract_is_still_usable() -> None:
+    """The real provider should still expose the version and dimensions we use."""
     with OnsClient() as client:
         version = client.get_dataset_version("TS009", "2021", 1)
 
