@@ -41,7 +41,7 @@ jobs:
             --csvw tests/fixtures/ons-population.csvw \
             --curated data/curated/ons_population \
             --quarantine data/quarantine/ons_population
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         # Retained evidence lets reviewers inspect what the run proved.
         with:
           name: python-spark-evidence
@@ -90,7 +90,7 @@ jobs:
       - name: Generate quality report
         run: |
           python -m pipeline_quality.evidence
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dbt-evidence
           path: |
