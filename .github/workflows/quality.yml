@@ -16,7 +16,7 @@ jobs:
     # One installed package is exercised at unit and distributed boundaries.
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -73,7 +73,7 @@ jobs:
       POSTGRES_PASSWORD: pipeline
       POSTGRES_DB: quality_lab
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -103,7 +103,7 @@ jobs:
     # Parse configuration before spending time on the authoritative image build.
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Validate Compose configuration
         run: docker compose config --quiet
       - name: Build authoritative runtime
