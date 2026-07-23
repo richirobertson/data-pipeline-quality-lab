@@ -1,4 +1,4 @@
-FROM python:3.11-slim-bookworm
+FROM python:3.14-slim-bookworm
 
 # Pin the database driver independently from PySpark so upgrades are deliberate.
 ARG SPARK_POSTGRES_JDBC_VERSION=42.7.5
