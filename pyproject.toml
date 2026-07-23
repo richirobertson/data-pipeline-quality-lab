@@ -55,7 +55,7 @@ markers = [
 
 [tool.coverage.run]
 branch = true
-omit = ["src/pipeline_quality/spark_job.py"]
+omit = ["*/pipeline_quality/spark_job.py"]
 
 [tool.coverage.report]
 fail_under = 85
