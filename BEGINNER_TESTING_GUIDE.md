@@ -125,6 +125,12 @@ runtime outputs are ignored by Git.
 
 ## The main commands
 
+The four learning commands below are guided walkthroughs. Before invoking a
+tool, the Make target prints its purpose, the risks it is checking, and how to
+interpret the underlying output. A final `OUTCOME: SUCCESS` message is printed
+only if the tool exits successfully; Make stops immediately on the first
+failure, so a success banner cannot hide an earlier error.
+
 ### Run the complete deterministic verification
 
 ```bash
@@ -174,6 +180,11 @@ make test-unit
 Use this while changing the API client, manifests, storage adapters, CLI, or
 evidence generator.
 
+This fast subset uses `--no-cov` because it intentionally excludes Spark tests
+and therefore cannot satisfy a whole-package coverage threshold. `make test`
+and CI still enforce the 85% coverage gate over the complete deterministic
+suite.
+
 ### Run only Spark tests
 
 ```bash
@@ -181,6 +192,8 @@ make test-spark
 ```
 
 Spark has higher startup cost, so it is separated for quicker development.
+Like `make test-unit`, this focused subset uses `--no-cov`; only the complete
+`make test` and CI runs enforce whole-package coverage.
 
 ### Run every deterministic pytest test
 
