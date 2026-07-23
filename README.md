@@ -147,5 +147,3 @@ For a quick technical review:
 ## Scope
 
 This is a portfolio-quality vertical slice, not a production ONS service. The complete [implementation plan](IMPLEMENTATION_PLAN.md) records later increments such as live ingestion, revision snapshots, backfills, concurrency controls, and broader fault injection.
-
-DuckDB is intentionally not used.
