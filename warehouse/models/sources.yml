@@ -1,0 +1,25 @@
+version: 2
+
+sources:
+  - name: raw
+    schema: raw
+    description: Conformed observations loaded by the PySpark boundary.
+    loaded_at_field: loaded_at
+    freshness:
+      warn_after: {count: 3650, period: day}
+      error_after: {count: 7300, period: day}
+    tables:
+      - name: raw_ons_observations
+        description: One accepted ONS observation per dimensional business key.
+        columns:
+          - name: geography_code
+            data_tests: [not_null]
+          - name: age_code
+            data_tests: [not_null]
+          - name: sex_code
+            data_tests: [not_null]
+          - name: observation
+            data_tests: [not_null]
+          - name: source_record_hash
+            data_tests: [not_null, unique]
+

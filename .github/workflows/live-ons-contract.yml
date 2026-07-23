@@ -1,0 +1,25 @@
+name: Live ONS contract
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 7 * * 2"
+
+permissions:
+  contents: read
+
+jobs:
+  live-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install ".[test]"
+      - name: Verify selected ONS dataset contract
+        env:
+          RUN_LIVE_ONS: "1"
+        run: pytest -m live --no-cov
+

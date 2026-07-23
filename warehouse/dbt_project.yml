@@ -1,0 +1,50 @@
+name: "ons_quality"
+version: "0.1.0"
+config-version: 2
+
+profile: "ons_quality"
+
+model-paths: ["models"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+models:
+  ons_quality:
+    +materialized: view
+    staging:
+      +schema: staging
+    dimensions:
+      +schema: analytics
+      +materialized: table
+    facts:
+      +schema: analytics
+      +materialized: table
+    marts:
+      +schema: marts
+      +materialized: table
+    audit:
+      +schema: audit
+
+seeds:
+  ons_quality:
+    +schema: raw
+    +quote_columns: false
+    raw_ons_observations:
+      +column_types:
+        geography_code: varchar
+        geography_label: varchar
+        age_code: varchar
+        age_label: varchar
+        sex_code: varchar
+        sex_label: varchar
+        dataset_id: varchar
+        edition: varchar
+        source_checksum: varchar
+        pipeline_run_id: varchar
+        source_record_hash: varchar
+        loaded_at: timestamp

@@ -1,0 +1,69 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "data-pipeline-quality-lab"
+version = "0.1.0"
+description = "A tested ONS-to-dbt data pipeline quality reference implementation"
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+license = { text = "MIT" }
+authors = [{ name = "Rich Robertson" }]
+dependencies = [
+  "boto3==1.35.99",
+  "httpx==0.28.1",
+  "pydantic==2.10.6",
+]
+
+[project.optional-dependencies]
+spark = ["pyspark==3.5.5"]
+dbt = [
+  "dbt-core==1.9.4",
+  "dbt-postgres==1.9.0",
+]
+test = [
+  "hypothesis==6.124.7",
+  "pytest==8.3.4",
+  "pytest-cov==6.0.0",
+  "ruff==0.9.6",
+]
+all = [
+  "dbt-core==1.9.4",
+  "dbt-postgres==1.9.0",
+  "hypothesis==6.124.7",
+  "pyspark==3.5.5",
+  "pytest==8.3.4",
+  "pytest-cov==6.0.0",
+  "ruff==0.9.6",
+]
+
+[project.scripts]
+pipeline-quality = "pipeline_quality.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+addopts = "-ra --strict-markers --cov=pipeline_quality --cov-report=term-missing"
+testpaths = ["tests"]
+markers = [
+  "spark: requires a Java runtime and PySpark",
+  "integration: requires local infrastructure",
+  "live: calls the live ONS API",
+]
+
+[tool.coverage.run]
+branch = true
+omit = ["*/pipeline_quality/spark_job.py"]
+
+[tool.coverage.report]
+fail_under = 85
+show_missing = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]

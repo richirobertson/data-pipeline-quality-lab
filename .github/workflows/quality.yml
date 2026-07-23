@@ -1,0 +1,103 @@
+name: Pipeline quality
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  python-and-spark:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Install project
+        run: pip install ".[all]"
+      - name: Lint
+        run: |
+          ruff check src tests
+          ruff format --check src tests
+      - name: Test
+        run: pytest --cov-report=xml
+      - name: Build deterministic fixture evidence
+        run: |
+          python -m pipeline_quality.fixture_pipeline
+          python -m pipeline_quality.spark_job \
+            --csv tests/fixtures/ons-population.csv \
+            --csvw tests/fixtures/ons-population.csvw \
+            --curated data/curated/ons_population \
+            --quarantine data/quarantine/ons_population
+      - uses: actions/upload-artifact@v4
+        with:
+          name: python-spark-evidence
+          path: |
+            coverage.xml
+            evidence/generated/
+
+  dbt:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16.6-alpine
+        env:
+          POSTGRES_USER: pipeline
+          POSTGRES_PASSWORD: pipeline
+          POSTGRES_DB: quality_lab
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U pipeline -d quality_lab"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: pipeline
+      POSTGRES_PASSWORD: pipeline
+      POSTGRES_DB: quality_lab
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dbt
+        run: pip install ".[dbt]"
+      - name: Build and test warehouse
+        working-directory: warehouse
+        run: |
+          dbt seed --profiles-dir .
+          dbt build --profiles-dir .
+          dbt docs generate --profiles-dir .
+      - name: Generate quality report
+        run: |
+          python -m pipeline_quality.evidence
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dbt-evidence
+          path: |
+            warehouse/target/manifest.json
+            warehouse/target/run_results.json
+            warehouse/target/catalog.json
+            evidence/generated/quality-report.md
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Compose configuration
+        run: docker compose config --quiet
+      - name: Build authoritative runtime
+        run: docker compose build quality

@@ -1,0 +1,27 @@
+version: 2
+
+models:
+  - name: fact_population_observation
+    description: Population observations at dataset/version/geography/age/sex grain.
+    columns:
+      - {name: observation_key, data_tests: [not_null, unique]}
+      - name: geography_key
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('dim_geography')
+              field: geography_key
+      - name: age_key
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('dim_age')
+              field: age_key
+      - name: sex_key
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('dim_sex')
+              field: sex_key
+      - {name: observation, data_tests: [not_null]}
+      - {name: source_record_hash, data_tests: [not_null, unique]}

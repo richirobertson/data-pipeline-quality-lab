@@ -1,64 +1,151 @@
 # Data Pipeline Quality Lab
 
-A production-minded data-pipeline testing showcase built around the [Office for National Statistics API](https://developer.ons.gov.uk/).
+[![Pipeline quality](https://github.com/richirobertson/data-pipeline-quality-lab/actions/workflows/quality.yml/badge.svg)](https://github.com/richirobertson/data-pipeline-quality-lab/actions/workflows/quality.yml)
 
-The pipeline will request a Census 2021 dataset covering population by age, sex, and geography, preserve the generated source artifacts, process them with PySpark, and use dbt to build and test an analytical warehouse. The emphasis is not simply moving data: it is producing defensible evidence that revisions, dimensional joins, aggregations, and reruns are correct.
+A production-minded data-pipeline testing reference implementation built around the [Office for National Statistics API](https://developer.ons.gov.uk/).
 
-## Intended architecture
+The repository uses the published Census 2021 `TS009` Age by Sex dataset. It preserves ONS source provenance, validates and normalises observations with PySpark, and uses dbt to build a contracted dimensional warehouse. Deliberate failure fixtures show how the pipeline explains invalid, conflicting, duplicate, and unreconciled data.
+
+## What works
+
+- Typed ONS API client for dataset versions and asynchronous filter outputs
+- Bounded retry behaviour with explicit `429` and `Retry-After` handling
+- Canonical filter hashes and content-addressed ingestion manifests
+- Immutable filesystem and S3/MinIO object-store adapters
+- CSVW and exact published CSV-header contracts
+- PySpark validation, quarantine, deterministic deduplication, provenance, and Parquet output
+- PostgreSQL warehouse scaffold with dbt sources, contracts, dimensions, facts, marts, and audit models
+- Reconciliation tests from raw seed to staging and fact layers
+- Docker Compose platform containing PostgreSQL and MinIO
+- Deterministic CI covering Python, Spark, dbt, and Docker
+- Generated Markdown quality evidence
+
+A committed [sample quality report](evidence/sample-quality-report.md) shows the
+reviewer-facing output from the deterministic vertical slice.
+
+## Architecture
 
 ```mermaid
 flowchart LR
     ONS["ONS Beta API"] --> Client["Python ingestion client"]
     Client --> Landing[("MinIO landing zone")]
-    Landing --> Spark["PySpark validation and normalisation"]
-    Spark --> Quarantine[("Quarantined records")]
-    Spark --> Parquet[("Partitioned Parquet")]
-    Parquet --> Load["Spark JDBC load"]
-    Load --> Warehouse[("PostgreSQL warehouse")]
-    Warehouse --> DBT["dbt models, contracts and tests"]
-    DBT --> Marts[("Population marts")]
+    Landing --> Spark["PySpark contract and normalisation"]
+    Spark --> Quarantine[("Quarantine Parquet")]
+    Spark --> Parquet[("Curated Parquet")]
+    Parquet --> Load["Spark JDBC boundary"]
+    Load --> Raw[("PostgreSQL raw")]
+    Raw --> DBT["dbt contracts and transformations"]
+    DBT --> Models[("Dimensions, facts and marts")]
     DBT --> Evidence["Quality evidence"]
     Quarantine --> Evidence
 ```
 
-## Technology
+The boundaries are deliberate:
 
-- Python 3.13 for ONS API integration and pipeline control
-- PySpark for distributed parsing, validation, deduplication, and Parquet production
-- MinIO as the local S3-compatible landing and curated-data store
-- PostgreSQL as the analytical warehouse
-- dbt Core with `dbt-postgres` for transformation, contracts, tests, snapshots, documentation, and lineage
-- pytest and Hypothesis for application and property-based testing
-- Testcontainers for PostgreSQL and integration boundaries
-- Docker Compose for the reproducible local platform
-- OpenTelemetry-compatible structured telemetry
-- GitHub Actions for deterministic checks and published evidence
+- Python owns HTTP workflow and provenance.
+- PySpark owns technical parsing, validation, deduplication, and distributed output.
+- dbt owns analytical transformations, model contracts, reconciliation, documentation, and lineage.
+- PostgreSQL and MinIO provide realistic local warehouse and object-storage interfaces.
+
+See [Architecture](docs/ARCHITECTURE.md) and [Test strategy](docs/TEST_STRATEGY.md) for the reasoning.
+
+## Quick start
+
+Requirements:
+
+- Docker with Compose support
+- GNU Make
+
+Run the deterministic checks:
+
+```bash
+make build
+make up
+make verify
+```
+
+Or inspect the layers separately:
+
+```bash
+make test-unit
+make test-spark
+make fixture
+make spark
+make dbt
+make evidence
+```
+
+Run the actual cross-component path—fixture landing, Spark processing, JDBC load, dbt build, and evidence—with:
+
+```bash
+make pipeline
+```
+
+Generated runtime data is written beneath `data/`. Evidence is written to `evidence/generated/` and dbt artifacts to `warehouse/target/`. Those generated directories are intentionally ignored by Git.
+
+PostgreSQL is exposed to the host on `55432`; MinIO uses `19000` for its API and `19001` for its console. Container-to-container traffic continues to use the standard service ports.
+
+Stop the services with:
+
+```bash
+make down
+```
+
+## ONS use case
+
+The implementation is pinned to:
+
+| Property | Value |
+|---|---|
+| Dataset | `TS009` — Age by Sex |
+| Edition | `2021` |
+| Version | `1` |
+| Population | Usual residents (`UR`) |
+| Geography | Lower-tier local authorities (`ltla`) |
+| Dimensions | `sex`, `resident_age_91a` |
+
+Repository fixtures use the exact headers published by ONS while keeping only eight representative observations. They are intentionally small enough for fast deterministic testing and are not presented as population statistics.
+
+## Quality controls
+
+| Risk | Control |
+|---|---|
+| ONS beta response changes | Typed models, content-type validation, recorded fixtures, optional live checks |
+| Filter never completes | Explicit state machine and bounded polling |
+| Rate limiting | `Retry-After` test and finite retry policy |
+| Artifact replacement | SHA-256 content addressing and immutable keys |
+| CSV/CSVW disagreement | Provider-header and metadata contract |
+| Missing or invalid observation | Quarantine with a stable reason code |
+| Conflicting dimensional key | All conflicting rows quarantined |
+| Duplicate across Spark partitions | Deterministic window-based deduplication |
+| Partition-dependent result | Invariance test across partition counts |
+| Broken dimensional joins | dbt relationship tests |
+| Silent row multiplication | Raw/staging/fact reconciliation |
+| Incorrect mart total | Singular fixture expectation test |
+
+## Repository map
+
+```text
+src/pipeline_quality/     Python ingestion, provenance, Spark and evidence code
+tests/                    Deterministic unit, property and Spark tests
+tests/fixtures/           Small provider-shaped ONS fixtures
+warehouse/                dbt project, seed, models and data tests
+docs/                     Architecture, test strategy and decisions
+.github/workflows/        CI and scheduled live-contract checks
+```
+
+## Reviewer path
+
+For a quick technical review:
+
+1. Read the boundary decisions in [Architecture](docs/ARCHITECTURE.md).
+2. Inspect `tests/test_ons_client.py` for upstream failure handling.
+3. Inspect `spark_transform.py` and `test_spark_transform.py` for distributed data-quality behaviour.
+4. Inspect `warehouse/models/` and `warehouse/tests/` for dbt contracts and reconciliation.
+5. Download the CI artifacts to see test, Spark, dbt, and quality evidence.
+
+## Scope
+
+This is a portfolio-quality vertical slice, not a production ONS service. The complete [implementation plan](IMPLEMENTATION_PLAN.md) records later increments such as live ingestion, revision snapshots, backfills, concurrency controls, and broader fault injection.
 
 DuckDB is intentionally not used.
-
-## Use case
-
-The first release will process one bounded Census 2021 extract across:
-
-- geography
-- age
-- sex
-- observation values
-
-The resulting mart will support population totals and distributions by geography, age band, and sex. ONS dataset edition and version metadata will be retained so revised publications can be compared instead of silently replacing history.
-
-## Quality themes
-
-- ONS dataset, edition, and version changes
-- Asynchronous filter creation and download readiness
-- API rate limits and `Retry-After` handling
-- CSV/CSVW schema agreement
-- PySpark schema drift and partition correctness
-- Duplicate and replayed observations
-- Geographic and demographic dimension integrity
-- dbt model contracts and source freshness
-- Reconciliation from ONS observations to published marts
-- Revision-aware snapshots and safe backfills
-- Reproducible test and release evidence
-
-See [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for the delivery sequence.

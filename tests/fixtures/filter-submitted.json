@@ -1,0 +1,12 @@
+{
+  "filter_output_id": "output-123",
+  "filter_id": "filter-123",
+  "instance_id": "instance-123",
+  "dataset": {
+    "id": "TS009",
+    "edition": "2021",
+    "version": 1,
+    "title": "Age by sex"
+  }
+}
+

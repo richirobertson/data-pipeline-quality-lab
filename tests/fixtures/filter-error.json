@@ -1,0 +1,13 @@
+{
+  "id": "output-123",
+  "filter_id": "filter-123",
+  "published": false,
+  "events": [
+    {
+      "type": "error",
+      "timestamp": "2026-01-01T00:00:00Z"
+    }
+  ],
+  "downloads": {}
+}
+

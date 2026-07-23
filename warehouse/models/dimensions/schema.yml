@@ -1,0 +1,19 @@
+version: 2
+
+models:
+  - name: dim_geography
+    columns:
+      - {name: geography_key, data_tests: [not_null, unique]}
+      - {name: geography_code, data_tests: [not_null, unique]}
+      - {name: geography_label, data_tests: [not_null]}
+  - name: dim_age
+    columns:
+      - {name: age_key, data_tests: [not_null, unique]}
+      - {name: age_code, data_tests: [not_null, unique]}
+      - {name: age_label, data_tests: [not_null]}
+  - name: dim_sex
+    columns:
+      - {name: sex_key, data_tests: [not_null, unique]}
+      - {name: sex_code, data_tests: [not_null, unique]}
+      - {name: sex_label, data_tests: [not_null]}
+

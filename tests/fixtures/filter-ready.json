@@ -1,0 +1,25 @@
+{
+  "id": "output-123",
+  "filter_id": "filter-123",
+  "published": true,
+  "events": [],
+  "dataset": {
+    "id": "TS009",
+    "edition": "2021",
+    "version": 1,
+    "title": "Age by sex"
+  },
+  "downloads": {
+    "csv": {
+      "public": "https://static.ons.gov.uk/datasets/output-123/TS009.csv",
+      "size": "512",
+      "skipped": false
+    },
+    "csvw": {
+      "public": "https://static.ons.gov.uk/datasets/output-123/TS009.csvw",
+      "size": "1024",
+      "skipped": false
+    }
+  }
+}
+

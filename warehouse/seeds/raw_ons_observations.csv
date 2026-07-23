@@ -1,0 +1,9 @@
+geography_label,geography_code,age_label,age_code,sex_label,sex_code,observation,dataset_id,edition,version,source_checksum,pipeline_run_id,source_record_hash,loaded_at
+Northumberland,E06000057,Aged under 1 year,0,Female,1,36000,TS009,2021,1,fixture-checksum,fixture-run,hash-001,2026-01-01 00:00:00
+Northumberland,E06000057,Aged under 1 year,0,Male,2,38000,TS009,2021,1,fixture-checksum,fixture-run,hash-002,2026-01-01 00:00:00
+Northumberland,E06000057,Aged 16 years,16,Female,1,101000,TS009,2021,1,fixture-checksum,fixture-run,hash-003,2026-01-01 00:00:00
+Northumberland,E06000057,Aged 16 years,16,Male,2,98000,TS009,2021,1,fixture-checksum,fixture-run,hash-004,2026-01-01 00:00:00
+Birmingham,E08000025,Aged under 1 year,0,Female,1,119000,TS009,2021,1,fixture-checksum,fixture-run,hash-005,2026-01-01 00:00:00
+Birmingham,E08000025,Aged under 1 year,0,Male,2,125000,TS009,2021,1,fixture-checksum,fixture-run,hash-006,2026-01-01 00:00:00
+Birmingham,E08000025,Aged 16 years,16,Female,1,363000,TS009,2021,1,fixture-checksum,fixture-run,hash-007,2026-01-01 00:00:00
+Birmingham,E08000025,Aged 16 years,16,Male,2,355000,TS009,2021,1,fixture-checksum,fixture-run,hash-008,2026-01-01 00:00:00

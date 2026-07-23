@@ -1,0 +1,10 @@
+boto3==1.35.99
+dbt-core==1.9.4
+dbt-postgres==1.9.0
+httpx==0.28.1
+hypothesis==6.124.7
+pydantic==2.10.6
+pyspark==3.5.5
+pytest==8.3.4
+pytest-cov==6.0.0
+ruff==0.9.6
