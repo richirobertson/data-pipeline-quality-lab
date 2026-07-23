@@ -48,6 +48,9 @@ The boundaries are deliberate:
 - PostgreSQL and MinIO provide realistic local warehouse and object-storage interfaces.
 
 See [Architecture](docs/ARCHITECTURE.md) and [Test strategy](docs/TEST_STRATEGY.md) for the reasoning.
+If data engineering is new to you, start with the
+[beginner's testing guide](BEGINNER_TESTING_GUIDE.md), which explains every
+test, command, and confidence claim in plain language.
 
 ## Quick start
 
