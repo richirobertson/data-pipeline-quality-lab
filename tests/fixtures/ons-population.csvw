@@ -1,0 +1,20 @@
+{
+  "@context": "http://www.w3.org/ns/csvw",
+  "url": "ons-population.csv",
+  "tableSchema": {
+    "columns": [
+      {"name": "Lower Tier Local Authorities Code", "datatype": "string", "required": true},
+      {"name": "Lower Tier Local Authorities", "datatype": "string", "required": true},
+      {"name": "Sex (2 categories) Code", "datatype": "string", "required": true},
+      {"name": "Sex (2 categories)", "datatype": "string", "required": true},
+      {"name": "Age (91 categories) Code", "datatype": "string", "required": true},
+      {"name": "Age (91 categories)", "datatype": "string", "required": true},
+      {"name": "Observation", "datatype": "integer", "required": true}
+    ],
+    "primaryKey": [
+      "Lower Tier Local Authorities Code",
+      "Sex (2 categories) Code",
+      "Age (91 categories) Code"
+    ]
+  }
+}

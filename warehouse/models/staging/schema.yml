@@ -1,0 +1,24 @@
+version: 2
+
+models:
+  - name: stg_ons_observations
+    description: Contracted, grain-preserving view of accepted Spark output.
+    config:
+      contract:
+        enforced: true
+    columns:
+      - {name: dataset_id, data_type: text, data_tests: [not_null]}
+      - {name: edition, data_type: text, data_tests: [not_null]}
+      - {name: version, data_type: integer, data_tests: [not_null]}
+      - {name: geography_code, data_type: text, data_tests: [not_null]}
+      - {name: geography_label, data_type: text, data_tests: [not_null]}
+      - {name: age_code, data_type: text, data_tests: [not_null]}
+      - {name: age_label, data_type: text, data_tests: [not_null]}
+      - {name: sex_code, data_type: text, data_tests: [not_null]}
+      - {name: sex_label, data_type: text, data_tests: [not_null]}
+      - {name: observation, data_type: bigint, data_tests: [not_null]}
+      - {name: source_checksum, data_type: text, data_tests: [not_null]}
+      - {name: pipeline_run_id, data_type: text, data_tests: [not_null]}
+      - {name: source_record_hash, data_type: text, data_tests: [not_null, unique]}
+      - {name: loaded_at, data_type: timestamp, data_tests: [not_null]}
+

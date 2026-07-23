@@ -1,0 +1,24 @@
+{
+  "dataset": {
+    "id": "TS009",
+    "edition": "2021",
+    "version": 1
+  },
+  "population_type": "UR",
+  "dimensions": [
+    {
+      "name": "ltla",
+      "is_area_type": true,
+      "options": [
+        "E06000057",
+        "E08000025"
+      ]
+    },
+    {
+      "name": "resident_age_91a"
+    },
+    {
+      "name": "sex"
+    }
+  ]
+}

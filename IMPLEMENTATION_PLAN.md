@@ -1,5 +1,14 @@
 # Implementation plan
 
+## Current status
+
+The first vertical slice is implemented. It covers the platform foundation, typed ONS
+client and fixtures, immutable manifests and object storage, PySpark validation and
+quarantine, JDBC loading, a contracted dbt warehouse, deterministic CI, and generated
+quality evidence. Later increments in this plan—revision snapshots, backfill controls,
+broader fault injection, orchestration, and telemetry—remain intentionally out of scope
+for the initial portfolio release.
+
 ## Goal
 
 Build a production-minded analytical pipeline using the ONS Beta API and Census 2021 data. The system will request a bounded population extract by age, sex, and geography; preserve its provenance; process it with PySpark; load it into PostgreSQL; and use dbt to create tested analytical models.
