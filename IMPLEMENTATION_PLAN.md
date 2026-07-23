@@ -2,198 +2,348 @@
 
 ## Goal
 
-Build a small but production-minded batch pipeline using Department for Transport Road Safety Data discovered through data.gov.uk. The repository should demonstrate senior-level testing decisions across ingestion, storage, transformation, orchestration, and release confidence.
+Build a production-minded analytical pipeline using the ONS Beta API and Census 2021 data. The system will request a bounded population extract by age, sex, and geography; preserve its provenance; process it with PySpark; load it into PostgreSQL; and use dbt to create tested analytical models.
 
-The first useful release will process one annual snapshot of collision, vehicle, and casualty data. Later increments can introduce multiple years, backfills, and deliberately faulty fixtures.
+The repository should demonstrate how a senior test engineer establishes confidence across an API, distributed data processing, a warehouse, dbt transformations, and operational reruns.
+
+## Why this use case
+
+The ONS API provides several useful real-world behaviours:
+
+- datasets are divided into editions and versions;
+- new versions may represent corrections, revisions, or newly available data;
+- multidimensional observations must retain their dimension context;
+- Census filter requests create asynchronous outputs before CSV and CSVW artifacts become available;
+- the API is currently beta and may introduce breaking changes;
+- clients must handle rate limiting and respect `Retry-After`.
+
+These behaviours make the source suitable for testing provenance, schema evolution, asynchronous workflows, revisions, dimensional modelling, and reconciliation.
+
+## Architectural boundaries
+
+### Python ingestion client
+
+Owns:
+
+- ONS API requests and typed response models;
+- dataset, edition, version, and dimension discovery;
+- filter creation, submission, polling, and artifact download;
+- timeouts, retries, `Retry-After`, checksums, and ingestion manifests.
+
+It does not own analytical transformation logic.
+
+### MinIO landing and curated zones
+
+Own:
+
+- immutable ONS responses and downloaded CSV/CSVW artifacts;
+- content-addressed source manifests;
+- partitioned Parquet produced by Spark;
+- reproducible inputs for reruns and tests.
+
+The design uses MinIO locally to exercise S3-style object-storage behaviour without requiring a cloud account.
+
+### PySpark
+
+Owns:
+
+- explicit source schemas;
+- CSV/CSVW parsing and agreement checks;
+- technical validation and rejected-record routing;
+- normalisation to a stable observation shape;
+- deterministic deduplication;
+- partitioned Parquet output;
+- loading conformed records into PostgreSQL through JDBC.
+
+PySpark is used where its distributed semantics matter. Business measures and warehouse joins remain in dbt so ownership is clear.
+
+### PostgreSQL and dbt
+
+dbt is the centre of the analytical implementation. It owns:
+
+- source declarations and freshness;
+- staging, intermediate, dimension, fact, and mart models;
+- model contracts;
+- generic, singular, unit, and relationship tests;
+- incremental-model and full-refresh equivalence;
+- snapshots of revision-sensitive metadata;
+- reconciliation and audit models;
+- documentation, exposures, and lineage.
+
+PostgreSQL provides a realistic warehouse target without adding a paid cloud dependency.
+
+### Pipeline control
+
+The first release uses a small Python command that executes the stages and records a run identifier. An orchestration framework will only be added after the stage contracts and recovery semantics are proven; orchestration should not obscure the data-quality design.
 
 ## Guiding constraints
 
 - Do not use DuckDB.
-- Keep external calls out of pull-request-critical tests.
-- Preserve every downloaded source file unchanged and record its checksum.
-- Make every pipeline stage repeatable and idempotent.
-- Treat data quality failures as first-class outputs, not only log messages.
-- Prefer focused contracts and reconciliations over indiscriminate column assertions.
-- Make local execution possible with Docker Compose and one documented command.
+- Make dbt the primary transformation and data-testing layer.
+- Use PySpark for technical normalisation, not for business logic duplicated from dbt.
+- Keep external ONS calls out of pull-request-critical tests.
+- Preserve every source response and artifact unchanged with a checksum.
+- Make ingestion, Spark processing, JDBC loading, and dbt models idempotent.
+- Treat quarantined data and failed quality gates as queryable outputs.
+- Never silently overwrite a previously processed ONS version.
+- Make the complete platform runnable through Docker Compose.
 
-## Phase 1 — establish the repository
+## Phase 1 — platform foundation
 
-1. Add Python project metadata, dependency locking, formatting, linting, type checking, and pre-commit hooks.
-2. Add a Docker Compose environment containing PostgreSQL.
-3. Define the repository layout for source adapters, ingestion, contracts, orchestration, dbt, fixtures, and tests.
-4. Add GitHub Actions for deterministic checks.
-5. Record architecture and testing decisions in short ADRs.
-
-Exit criteria:
-
-- A clean checkout can run formatting, static analysis, and an empty test suite.
-- PostgreSQL starts locally and is exercised by a container smoke test.
-- Pull requests do not require data.gov.uk availability.
-
-## Phase 2 — source discovery and immutable ingestion
-
-1. Implement a data.gov.uk CKAN catalogue client using the documented `package_search` and `package_show` actions.
-2. Represent catalogue responses with typed models.
-3. Resolve the selected road-safety resources without hard-coding transient download URLs where possible.
-4. Download files using streaming I/O, bounded retries, timeouts, and a descriptive user agent.
-5. Store immutable raw files with retrieval timestamp, source URL, HTTP metadata, size, and SHA-256 checksum.
-6. Write a manifest describing every ingestion attempt.
+1. Add Python project metadata, locked dependencies, formatting, linting, type checking, and pre-commit hooks.
+2. Add Docker Compose services for MinIO and PostgreSQL.
+3. Add a local PySpark runtime with the pinned Java, Spark, Hadoop, S3, and PostgreSQL JDBC versions documented.
+4. Scaffold the dbt project and validate its PostgreSQL profile.
+5. Define folders for ingestion, Spark jobs, dbt models, fixtures, contracts, evidence, and ADRs.
+6. Add deterministic GitHub Actions checks.
 
 Tests:
 
-- Recorded catalogue fixtures for deterministic contract tests.
-- Timeout, `429`, `5xx`, malformed JSON, HTML error page, truncated download, and checksum mismatch cases.
-- Property tests for filename and manifest generation.
-- Idempotency test proving the same resource is not silently duplicated.
-- Optional scheduled live contract check against data.gov.uk.
+- Container health checks.
+- PostgreSQL and MinIO connectivity tests.
+- A Spark session smoke test with the production configuration.
+- `dbt debug`, parsing, and an empty build.
+- Dependency compatibility checks for Spark/JDBC/S3 packages.
 
 Exit criteria:
 
-- One annual dataset can be discovered and downloaded reproducibly.
-- An upstream outage produces actionable evidence without corrupting local state.
+- One command starts the local platform.
+- CI can lint, type-check, run unit tests, initialise Spark, and parse the dbt project.
+- No CI check requires live ONS availability.
 
-## Phase 3 — raw-data contracts and quarantine
+## Phase 2 — ONS discovery and filter workflow
 
-1. Define Pandera contracts for collision, vehicle, and casualty files.
-2. Validate headers, encodings, types, nullability, enumerations, identifiers, date/time fields, and geographic ranges.
-3. Separate structural failures from row-level quality failures.
-4. Send invalid rows to quarantine with dataset, source file, row identifier, rule, observed value, and timestamp.
-5. Publish a validation summary in JSON and Markdown.
+1. Implement a typed ONS client against `https://api.beta.ons.gov.uk/v1`.
+2. Discover and persist the selected Census dataset, edition, version, dimensions, options, and geography codes.
+3. Create a bounded filter for population by age, sex, and geography.
+4. Submit the filter and poll its output with a finite state machine.
+5. Download CSV and CSVW artifacts once ready.
+6. Store request/response metadata, source identifiers, URLs, timestamps, sizes, ETags where available, and SHA-256 checksums in a manifest.
+7. Send a simple, non-identifying versioned user agent and respect ONS rate limits.
 
 Tests:
 
-- Golden examples representing known-good source rows.
-- Focused fixtures for missing columns, unexpected columns, invalid codes, corrupt dates, impossible coordinates, and duplicate identifiers.
-- Mutation testing of the most important validation rules.
-- Property tests for boundary values and null representations.
+- Recorded fixtures for discovery, filter creation, submission, pending, ready, and failed states.
+- State-machine tests for valid and invalid filter-output transitions.
+- `429` tests that verify `Retry-After` is honoured.
+- Timeout, `5xx`, malformed JSON, unexpected content type, truncated download, and checksum mismatch tests.
+- Property tests for manifests and polling limits.
+- A scheduled, non-blocking live contract test.
 
 Exit criteria:
 
-- Invalid data is explainable and traceable to its source.
-- Validation results are deterministic and machine-readable.
+- A filter request can be replayed from its manifest.
+- A source outage or unfinished filter cannot create a successful ingestion record.
 
-## Phase 4 — PostgreSQL loading
+## Phase 3 — immutable object storage and provenance
 
-1. Create raw and staging schemas with explicit migration tooling.
-2. Load valid records in bounded batches.
-3. Track file-level and row-level lineage.
-4. Use natural source identifiers plus load metadata to make reruns safe.
-5. Implement transactional failure handling and resumable loads.
+1. Define landing-zone keys using dataset, edition, version, filter definition hash, and artifact checksum.
+2. Store raw API responses, CSV, CSVW, and manifests in MinIO without mutation.
+3. Prevent a key from being overwritten by different content.
+4. Add a run ledger in PostgreSQL linking pipeline runs to immutable source artifacts.
+5. Define retention rules for small repository fixtures versus downloaded runtime data.
 
 Tests:
 
-- Testcontainers integration tests against the supported PostgreSQL version.
-- Duplicate ingestion and replay tests.
-- Transaction rollback tests for partial batch failure.
-- Row-count and checksum reconciliation between validated files and staging tables.
-- Migration tests from an empty and previous-version database.
+- Content-addressability and overwrite-protection tests.
+- Repeated-download idempotency.
+- Interrupted upload cleanup.
+- Manifest-to-object checksum reconciliation.
+- Missing-object and stale-manifest behaviour.
 
 Exit criteria:
 
-- Reprocessing the same source produces no duplicate business records.
-- Partial failure cannot leave an apparently successful load.
+- Every downstream row can be associated with an immutable ONS version and artifact.
+- Rerunning ingestion cannot silently replace accepted inputs.
 
-## Phase 5 — dbt transformations and analytical marts
+## Phase 4 — PySpark bronze-to-silver processing
 
-1. Create staging models that preserve source meaning while normalising names and types.
-2. Create intermediate models joining collisions, vehicles, and casualties.
-3. Create a small mart for annual and geographic safety measures.
-4. Document models, columns, ownership, and lineage.
-5. Add dbt source freshness and schema contracts.
+1. Read the CSV and CSVW metadata from MinIO.
+2. Define an explicit Spark schema instead of relying on inference.
+3. Verify CSV columns and types agree with CSVW metadata.
+4. Normalise the source into a stable long-form observation model containing:
+   - dataset, edition, and version;
+   - geography code and label;
+   - age code and label;
+   - sex code and label;
+   - observation value;
+   - source checksum and pipeline run identifier.
+5. Route invalid rows to a quarantine Parquet dataset with rule identifiers and observed values.
+6. Deduplicate deterministically using the full dimensional business key.
+7. Write curated Parquet partitioned by edition, version, and geography type.
+8. Load conformed observations and source metadata into PostgreSQL using JDBC.
 
 Tests:
 
-- Uniqueness, non-null, accepted-value, and relationship tests.
-- Custom tests for collision/vehicle/casualty cardinality.
-- Reconciliation of source totals through every layer.
-- Singular SQL tests for impossible domain combinations.
-- Unit tests for high-risk transformation logic.
+- Local Spark unit tests over small fixtures.
+- Explicit schema drift tests for missing, added, reordered, and retyped fields.
+- CSV/CSVW disagreement tests.
+- Null, invalid numeric, negative observation, and unexpected category tests.
+- Duplicate records spread across partitions.
+- Partition-count invariance and deterministic-output tests.
+- Property tests comparing PySpark results with a small pure-Python reference implementation.
+- JDBC retry, transaction, and partial-write tests.
 
 Exit criteria:
 
-- Every published measure can be traced and reconciled to source data.
-- Broken joins and silent row multiplication are detected.
+- Equivalent input produces equivalent curated data regardless of Spark partition count.
+- Rejected data is traceable and does not disappear from reconciliation totals.
 
-## Phase 6 — orchestration and operational behaviour
+## Phase 5 — dbt staging and contracts
 
-1. Build a Prefect flow for discovery, download, validation, load, dbt build, and evidence publication.
-2. Define retry policies by failure class rather than applying retries indiscriminately.
-3. Add backfill parameters and safe concurrency controls.
-4. Emit structured logs, run identifiers, metrics, and OpenTelemetry traces.
-5. Expose a clear terminal state: passed, passed with quarantined rows, source unavailable, or failed quality gate.
+1. Declare raw PostgreSQL sources with freshness and loaded-at metadata.
+2. Build staging models that rename, type, and document source columns without changing grain.
+3. Enable dbt contracts on public models.
+4. Define the observation business key and enforce uniqueness.
+5. Add reusable generic tests for codes, labels, non-negative observations, and provenance fields.
+6. Add audit models comparing Spark load manifests with dbt source counts.
 
 Tests:
 
-- Flow-level tests with task boundaries mocked appropriately.
-- Recovery from interrupted runs.
-- Retry classification tests.
-- Concurrent-run and lock tests.
-- Backfill tests spanning multiple source snapshots.
+- dbt source freshness.
+- `not_null`, `unique`, `accepted_values`, and relationship tests.
+- Singular tests for incomplete business keys and invalid measures.
+- dbt unit tests for high-risk staging rules.
+- Contract-failure fixtures proving breaking changes stop the build.
 
 Exit criteria:
 
-- A failed run is diagnosable without rerunning it.
-- Reruns and backfills do not change previously accepted results unexpectedly.
+- dbt cannot build on an unrecognised source schema.
+- Staging preserves source grain and reconciles exactly with accepted Spark output.
 
-## Phase 7 — deliberate fault laboratory
+## Phase 6 — dimensional warehouse and marts
 
-Create versioned faulty datasets that introduce:
+1. Build conformed geography, age, sex, dataset-version, and pipeline-run dimensions.
+2. Build a population-observation fact table at the declared dimensional grain.
+3. Build marts for:
+   - population totals by geography;
+   - age distribution by geography;
+   - sex distribution by geography;
+   - cross-version revision comparisons.
+4. Add dbt exposures for the generated quality report.
+5. Generate and publish dbt documentation and lineage.
 
-1. Duplicate collisions.
-2. Orphan casualties and vehicles.
-3. Missing files.
-4. Schema drift.
-5. Changed code lists.
-6. Invalid geographic coordinates.
-7. Late corrections to historic records.
-8. Row multiplication during a join.
-9. A unit or semantic change that remains type-valid.
-10. A partial publication that looks superficially successful.
+Tests:
+
+- Referential integrity from facts to every dimension.
+- Fact-grain uniqueness.
+- Totals equal the sum of disjoint age and sex categories where the source definition supports it.
+- No row multiplication across joins.
+- Geographic roll-up reconciliation with documented tolerances.
+- dbt unit tests for banding and aggregation logic.
+
+Exit criteria:
+
+- Every published measure can be traced to its source artifact and ONS version.
+- Mart totals reconcile to the accepted source observations.
+
+## Phase 7 — incremental models, revisions, and backfills
+
+1. Implement incremental loading keyed by ONS dataset, edition, version, and dimensional business key.
+2. Snapshot dataset metadata and dimension labels to expose revisions.
+3. Define behaviour for a new version of an existing edition.
+4. Add a parameterised backfill command.
+5. Compare incremental and full-refresh results.
+6. Prevent concurrent runs from publishing the same version twice.
+
+Tests:
+
+- First load, no-change rerun, new-version, corrected-observation, and removed-observation scenarios.
+- Incremental versus full-refresh equivalence.
+- Out-of-order version arrival.
+- Backfill across multiple versions.
+- Concurrent-run locking and recovery after interruption.
+- Snapshot history and validity-window tests.
+
+Exit criteria:
+
+- A revised ONS version is visible as a revision, not an unexplained overwrite.
+- Full refresh and incremental processing produce equivalent current-state marts.
+
+## Phase 8 — deliberate quality-failure laboratory
+
+Create versioned fixtures that introduce:
+
+1. Breaking ONS response-schema drift.
+2. A filter output that never becomes ready.
+3. CSV and CSVW disagreement.
+4. Duplicate observations split across Spark partitions.
+5. Missing geography dimension members.
+6. A changed label for an existing code.
+7. Negative or non-numeric observations.
+8. Spark partition skew.
+9. A dbt join that multiplies rows.
+10. A faulty incremental predicate.
+11. A historic revision arriving after a newer version.
+12. A partial JDBC load followed by retry.
 
 For each fault, document:
 
-- The business risk.
-- The earliest useful detection point.
-- The test or monitor that detects it.
-- The evidence shown to an operator.
-- The recovery procedure.
+- the business risk;
+- the earliest useful detection point;
+- the responsible control;
+- the operator-facing evidence;
+- the recovery procedure.
 
 Exit criteria:
 
-- CI proves each fault is caught by the intended control.
-- The repository contains a risk-to-test coverage matrix.
+- CI proves each fault is caught at the intended architectural boundary.
+- A risk-to-test matrix explains why every control exists.
 
-## Phase 8 — release evidence and portfolio presentation
+## Phase 9 — operational evidence
 
-1. Generate a static Markdown/HTML quality report for a sample run.
-2. Include source provenance, checksums, row counts, rejected rows, reconciliations, freshness, test results, and pipeline timing.
-3. Publish CI artifacts without committing bulky government datasets.
-4. Add an architecture diagram, demonstration recording, quick start, and guided reviewer path.
-5. Add security scanning, Dependabot, licence, contribution guidance, and tagged releases.
+1. Add a run command covering ingestion, Spark processing, JDBC load, `dbt build`, and evidence generation.
+2. Emit structured logs with source version, filter ID, artifact checksum, Spark application ID, dbt invocation ID, and pipeline run ID.
+3. Produce a static Markdown/HTML evidence report containing:
+   - source provenance and checksums;
+   - Spark input, accepted, quarantined, and output counts;
+   - dbt build and test results;
+   - layer-by-layer reconciliations;
+   - revision comparison;
+   - freshness and duration.
+4. Upload dbt artifacts, Spark summaries, and the evidence report from CI.
+5. Add OpenTelemetry-compatible traces after the run identifiers and stage boundaries are stable.
 
 Exit criteria:
 
-- A reviewer can understand the system and inspect credible evidence in under ten minutes.
-- The repository demonstrates why the data product is trustworthy, not merely that the code has tests.
+- A failed run is diagnosable from retained evidence without reproducing it.
+- A reviewer can understand the architecture and inspect a credible sample run in under ten minutes.
+
+## Phase 10 — portfolio release
+
+1. Add a concise quick start and reviewer walkthrough.
+2. Add architecture decision records explaining PySpark, dbt/PostgreSQL, MinIO, and orchestration choices.
+3. Publish dbt docs and a sample evidence report.
+4. Add a short demonstration recording.
+5. Add CodeQL, Dependabot, licence, contribution guidance, and release notes.
+6. Tag the first complete release.
+
+Exit criteria:
+
+- The repository demonstrates testing maturity across API, Spark, storage, warehouse, and dbt boundaries.
+- Technology choices are justified by failure modes rather than included as a tool checklist.
 
 ## Suggested milestones
 
-1. `v0.1-foundation` — tooling, PostgreSQL, CI, and architecture.
-2. `v0.2-ingestion` — catalogue discovery, immutable downloads, and manifests.
-3. `v0.3-contracts` — validation, quarantine, and reports.
-4. `v0.4-warehouse` — PostgreSQL loading and dbt transformations.
-5. `v0.5-operations` — Prefect, backfills, telemetry, and recovery.
-6. `v1.0-quality-lab` — fault catalogue and published release evidence.
+1. `v0.1-platform` — Docker Compose, Spark, MinIO, PostgreSQL, dbt, and CI.
+2. `v0.2-ons-ingestion` — discovery, filter workflow, manifests, and immutable artifacts.
+3. `v0.3-spark-processing` — explicit schemas, quarantine, Parquet, and JDBC load.
+4. `v0.4-dbt-warehouse` — staging, contracts, dimensions, facts, marts, and reconciliation.
+5. `v0.5-revisions` — incremental models, snapshots, backfills, and recovery.
+6. `v1.0-quality-lab` — fault laboratory, evidence report, documentation, and demonstration.
 
-## Initial backlog
+## First implementation slice
 
-The first implementation slice should be deliberately narrow:
+The first slice should prove the architecture without attempting the full platform:
 
-1. Confirm the exact current data.gov.uk road-safety package identifier and resource URLs once the catalogue is available.
-2. Add the Python project and Docker Compose PostgreSQL service.
-3. Save one representative catalogue response and small, licence-compatible data fixtures.
-4. Implement catalogue discovery and raw-file manifest generation.
-5. Add deterministic success and upstream-failure tests.
-6. Run those checks in GitHub Actions.
+1. Pin the exact Census 2021 dataset, edition, version, dimensions, and a small geography set.
+2. Add Docker Compose services for PostgreSQL and MinIO.
+3. Scaffold Python, PySpark, and dbt projects with compatible pinned versions.
+4. Store representative ONS API, CSV, and CSVW fixtures.
+5. Implement filter-output polling and immutable manifest generation.
+6. Implement one PySpark job that converts the fixture into partitioned Parquet.
+7. Load it into PostgreSQL and build one contracted dbt staging model plus one population mart.
+8. Add reconciliation from source rows to Spark output to dbt mart.
+9. Run the complete deterministic slice in GitHub Actions.
 
-This slice establishes the boundaries and testing model before committing to the full transformation design.
+This vertical slice validates the component boundaries before adding more datasets, orchestration, or observability.
